@@ -237,9 +237,7 @@ internal static class YamlViewModelExtensions
             return null;
         }
 
-        var children = model.Type is MemberType.Enum && config.EnumSortOrder is EnumSortOrder.DeclaringOrder
-            ? model.Items?.Select(x => x.Name).ToList()
-            : model.Items?.Select(x => x.Name).OrderBy(s => s, StringComparer.Ordinal).ToList();
+        var children = model.Items?.Select(x => x.Name).ToList();
 
         var result = new ItemViewModel
         {
