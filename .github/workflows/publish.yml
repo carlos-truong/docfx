@@ -1,0 +1,66 @@
+name: Publish DocFX Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build (e.g., v2.78.4)'
+        required: true
+        type: string
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+  packages: write  # Required to publish to GitHub Packages
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install templates dependencies
+        run: npm ci
+        shell: bash
+        working-directory: templates
+
+      - name: Build templates
+        run: npm run build
+        shell: bash
+        working-directory: templates
+
+      - name: Setup .Net
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.x
+
+      - name: Build docfx
+        run: dotnet build src/docfx -c Release
+
+      - name: Pack NuGet package
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.tag }}"
+          else
+            VERSION=${GITHUB_REF#refs/tags/}
+          fi
+          VERSION=${VERSION#v}
+          echo "Packing DocFX version: $VERSION"
+          dotnet pack src/docfx -c Release -p:PackageVersion=$VERSION -o ./nupkgs
+
+      - name: Publish to GitHub Packages
+        run: |
+          dotnet nuget add source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" --name github --username ${{ github.repository_owner }} --password ${{ secrets.PACKAGES_TOKEN }} --store-password-in-clear-text
+
+          dotnet nuget push ./nupkgs/*.nupkg --source github --api-key ${{ secrets.PACKAGES_TOKEN }} --skip-duplicate
